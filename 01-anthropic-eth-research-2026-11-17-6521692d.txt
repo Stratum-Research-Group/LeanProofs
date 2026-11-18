@@ -1,0 +1,74 @@
+ANTHROPIC ETH: RESEARCH BRIEF
+A 2^o(n) Time Algorithm for 3-SAT
+Prepared for Nick Mynhardt | 17 November 2026
+
+VERDICT
+Investigate this first for statement-to-proof auditing and algorithm design. The repository claims an asymptotic breakthrough in exact SAT counting, not a practical SAT solver. This brief does not establish that ETH has been refuted. It inspects published statements and documentation, not a fresh proof build or an independent mathematical review.
+
+Snapshot: anthropics/formal-math, main HEAD observed as
+16a5ce41304fcdaea4e0be7c132e1c361dc26da5.
+This is a research artifact the owner says is unmaintained.
+
+1. WHAT THE PACKAGE CLAIMS
+
+The owner publishes a paper attributed to Claude and a Lean development. Its short Mathlib-only MainResults.lean defines two propositions:
+
+- ETHIsFalse: the negation of 0 < s_3, where s_k is the infimum of exponential rates for deterministic k-SAT decision.
+- MainTheorem: one finite-alphabet deterministic machine and one constant work across k and eligible formulas, exactly counting satisfying assignments within
+  2^[C min{k m/sqrt(log m), k^2 n log log n/sqrt(log n)}]
+  steps. Logs here are base two. Inputs have k >= 1, n >= 4 and m >= 2; every declared variable occurs and clauses are not repeated.
+
+For fixed k, the n-based exponent is sublinear. That is the claimed connection to ETH. It is not a polynomial-time claim and does not imply P = NP.
+
+The formal model is Mathlib's FinTM2, using finitely many stacks with explicitly finite alphabets. Time counts machine steps. The input encoding includes unary n, fixed-width literal slots and a separate k header for the counting theorem. The output is the exact count in n+1 bits.
+
+2. WHY IT IS WORTH INVESTIGATING
+
+A. Audit architecture. MainResults.lean is deliberately separate from the proof. PaperIndex.lean maps numbered paper statements to formal counterparts and records differences. This is a useful pattern for Seedwell and LTHCM: keep the intended claim readable before exposing its implementation or proof.
+
+B. Algorithmic construction. The owner's condensed description centers on tensor-network contraction, swap decompositions, rank products and recursive regrouping. These are leads for a careful mathematical reading, not validated compression tricks. Start by reconstructing one finite contraction identity and accounting for its arithmetic cost before considering any broader application.
+
+C. Uniformity. The distinction between one machine working for all inputs, a family of machines depending on a target exponent, and one counting machine uniform in k is unusually important here. The formal statement makes these quantifiers inspectable.
+
+3. GAPS AND RISKS TO CHECK
+
+Confirmed scope boundary: the header explicitly leaves machine simulation and formula rewriting outside Lean. The claim-to-usual-computation bridge therefore still needs a human audit. Do not report this bridge as machine-checked.
+
+Confirmed restriction: MainTheorem does not cover arbitrary bit strings or all raw CNF presentations. Removing unused variables, duplicate clauses and small cases needs careful bookkeeping. For counting, unused variables contribute powers of two; simply deleting them without restoring the factor changes the answer.
+
+Confirmed proof-route difference: the opening explanatory section of proof/PaperIndex.lean says the formal proof is not the printed proof step for step. It records changes to alternation overhead, written-out tables and explicit time budgets; some intermediate cost models allow polynomial-time functions of the whole state, subject to size bounds. It also distinguishes decision-form versions of several printed counting statements from separately proved counting counterparts. These disclosures do not demonstrate a false theorem. They make tracing the complete cost-model compilation into the final finite-alphabet machine a specific audit priority, rather than assuming that each paper sentence was checked verbatim.
+
+Audit question, not a found defect: check that every tensor, coefficient and intermediate representation is charged for bit length, construction, exact arithmetic and output materialization. A small rank bound alone is not an implementation-time bound.
+
+Audit question: inspect the machine-model transfer in the correct direction, including uniformity and the effect of simulation overhead on exponential rates. Do not replace this with a generic claim that all computational models are interchangeable.
+
+There is no demonstrated practical crossover in the inspected material. That does not remove the theoretical research value.
+
+4. BOUNDED INVESTIGATION PLAN
+
+Stage A, no proof build: read MainResults.lean end to end and write a one-page contract: quantifiers, encoding, legal inputs, output, time and informal bridges. Pass only if each paper headline maps to that contract without silently dropping restrictions.
+
+Stage B, small independent experiment: implement the smallest contraction identity and compare exact integer or rational results against direct enumeration. Freeze sizes and seeds before running. Reject any case with a mismatch. This can falsify a reconstruction, not validate the full asymptotic theorem.
+
+Stage C, selected proof audit: follow one central paper statement through PaperIndex.lean to its proof dependencies. Check that it is about execution cost, not merely an algebraic identity or an abstract cost proxy.
+
+Stage D, optional later verification: use the pinned toolchain, build, inspect the actual headline axiom closures, then run Comparator and the second-kernel path. The README's roughly eight-minute build on 24 virtual CPUs and roughly 7 GB largest process are owner-reported measurements, not measurements from this review. Do not launch that gate without a suitable resource budget.
+
+Stop and classify a failure: statement mismatch, bridge gap, failed mathematical identity, failed proof build or practical overhead. They are different findings.
+
+5. COMPARISON WITH OPENAI'S ETH PACKAGE
+
+OpenAI's scope document explicitly gives a weaker formalized exponent with (log log n)^2, while its manuscript gives sharper bounds. Anthropic exposes an explicit ETHIsFalse proposition. Neither difference establishes which construction is correct, independent or practically faster. Compare exact encodings and formal contracts first; compare construction details only after that.
+
+WHAT WAS AND WAS NOT CHECKED
+Read the owner README, MainResults.lean and paper-index material. No local Lean build, axiom-print run, second-kernel replay, SAT benchmark or independent proof validation was performed. Repository CI instructions are not evidence that this review ran or verified them.
+
+SOURCES
+Owner project and verification instructions:
+https://github.com/anthropics/formal-math/blob/main/eth/README.md
+Exact formal statement and explicit informal bridges:
+https://github.com/anthropics/formal-math/blob/main/eth/MainResults.lean
+Paper-to-Lean map:
+https://github.com/anthropics/formal-math/blob/main/eth/proof/PaperIndex.lean
+Cross-package comparison, OpenAI's formalization scope:
+https://github.com/openai/math/blob/main/lean/docs/378.md

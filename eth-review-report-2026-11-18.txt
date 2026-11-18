@@ -1,0 +1,149 @@
+ANTHROPIC ETH RESEARCH REVIEW AND STAGE AUDIT REPORT
+Date: 18 November 2026
+Repository Snapshot: anthropics/formal-math (eth/ subpackage)
+Reviewed commit: 16a5ce41304fcdaea4e0be7c132e1c361dc26da5
+Paper Reviewed: paper.pdf ("A 2^o(n) Time Algorithm for 3-SAT", Claude / Anthropic, October 26, 2026)
+Reference Plan: eth/01-anthropic-eth-research-2026-11-17-6521692d.txt
+
+================================================================================
+VERDICT
+================================================================================
+THEORETICAL ARTIFACT CONFIRMED WITH SUBSTANTIAL FORMAL-TO-MODEL AND
+PAPER-TO-LEAN TRANSLATION GAPS. NOT A GENERAL PRACTICAL SOLVER NOR A COMPLETE
+END-TO-END AUTOMATED VERIFICATION OF ETH REFUTATION ON STANDARD MODELS OF
+COMPUTATION.
+
+The package publishes an asymptotic #3-SAT algorithm in 2^{O(n log log n / sqrt(log n))}
+steps, formalizing two headline claims (`ETHIsFalse` and `MainTheorem`) in Lean 4.
+However:
+1. The formal model uses Mathlib's `FinTM2` (multi-stack Turing machine), leaving
+   the simulation equivalence to word-RAM, random access machines, and standard
+   computational models explicitly outside Lean.
+2. `MainTheorem` requires strict formula conditions: variables x_0 ... x_{n-1}
+   must all occur, no duplicate clauses, k >= 1, n >= 4, m >= 2. Deleting dummy
+   variables changes #SAT counts by powers of 2, requiring delicate non-formalized
+   classical preprocessing.
+3. The Lean proof is NOT a step-for-step formalization of the printed paper:
+   Section 6 and Algorithm 1 are formalized primarily in decision form rather than
+   counting form, alternation overheads differ by polynomial powers, and intermediate
+   cost models rely on arbitrary polynomial-time transition functions with state bounds.
+
+================================================================================
+STAGE-BY-STAGE EXECUTION OF ITEMS
+================================================================================
+
+--------------------------------------------------------------------------------
+STAGE A: SPECIFICATION CONTRACT AUDIT (MainResults.lean vs Paper Headline)
+Status: COMPLETED (SOURCE-CONFIRMED)
+--------------------------------------------------------------------------------
+Audited file: eth/MainResults.lean (182 lines)
+
+Contract Definition & Quantifiers:
+- Quantifiers:
+  * `ETHIsFalse`: ¬(0 < s 3), where s 3 is the infimum over delta >= 0 of machines
+    M (with finite alphabets) deciding 3-SAT in floor(c * 2^{delta * n}) steps.
+  * `MainTheorem`: ∃ (M : TM2ComputableAux Bool Bool) (C : ℕ), (∀ i, Finite (M.tm.Γ i)) ∧
+    ∀ (k n : ℕ) (φ : CNF n), 1 ≤ k → IsKCNF k φ → 2 ≤ φ.length → 4 ≤ n → AllOccur φ →
+    CountsWithin M k φ (timeMin C k φ.length n).
+- Encoding:
+  * k-SAT input: 1^k 0 followed by 1^n 0, then for each clause k slots of
+    floor(log_2(2n)) + 1 bits (unary length headers + fixed-width bit slots).
+- Restrictions & Bounds:
+  * k >= 1, n >= 4, m >= 2.
+  * Every variable in Fin n must occur in phi (`AllOccur φ`).
+  * Clauses must not be duplicated (`φ.Nodup`).
+- Informal Bridges Outside Lean:
+  * RAM / Word-RAM to multi-stack Turing machine (FinTM2) simulation.
+  * Standard formula representation (arbitrary CNF) to normalized encoding
+    without isolated variables.
+
+--------------------------------------------------------------------------------
+STAGE B: INDEPENDENT CONTRACTION IDENTITY EXPERIMENT
+Status: COMPLETED (REPRODUCED)
+--------------------------------------------------------------------------------
+Evaluated the single-bit and multi-bit uncrossing identities from Appendix H and
+`proof/networks/Groundwork/Cross/Bit.lean`:
+- Single-bit identity:
+  X_1(x,y,u,v) = I_1(x,y,u,v) - s(x,y)*s(u,v)
+  where X_1 is diagonal crossing [x=v][y=u], I_1 is [x=u][y=v], and s(p,q) = (-1)^p [p != q].
+- Multi-bit expansion:
+  sum_{i=0}^lambda A_i(lambda, x, y, u, v) == cross_lambda(x, y, u, v).
+
+Empirical verification script: eth/verify_contraction_identity.py
+- Single-bit: 16/16 input assignments verified.
+- Lambda = 1: 16/16 assignments verified.
+- Lambda = 2: 256/256 assignments verified.
+- Lambda = 3: 4,096/4,096 assignments verified.
+Total checks: 4,384 configurations tested without mismatch (0 errors).
+
+--------------------------------------------------------------------------------
+STAGE C: SELECTED PROOF AUDIT & DEPENDENCY TRACING
+Status: COMPLETED (SOURCE-CONFIRMED)
+--------------------------------------------------------------------------------
+Audited file: eth/proof/PaperIndex.lean (2,848 lines) and dependency headers.
+- Finding on Proof Equivalence:
+  `PaperIndex.lean` explicitly notes that Theorem 2, Lemma 4, and Algorithm 1 are
+  proved in Lean for *deciding* satisfiability rather than *counting* (procedure Sat
+  instead of #Sat), while the printed paper presents #Sat directly. Counting for k=3
+  is separately routed via `FromPrinted.SplitCount.countingCorollary`.
+- Intermediate Cost Model:
+  Lean uses a cost model where one step may compute any polynomial-time function of
+  the whole state (under state-size constraints) rather than unit-cost operations,
+  and inserts blank-symbol string padding for execution budgets.
+- Simulation Cost:
+  Theorem D(a) is compiled with adjusted constants (2C_0 + 1) to absorb table writing
+  and step compilation into the final FinTM2 machine.
+
+--------------------------------------------------------------------------------
+STAGE D: VERIFICATION GATES & TOOLCHAIN STATUS
+Status: COMPLETED (FULLY REPRODUCED ON HOST)
+--------------------------------------------------------------------------------
+- Toolchain installed: `leanprover/lean4:v4.33.1` via `elan` (commit `819816b2e0a3bf405af45ae5c7af2491d8f5bee6`).
+- Precompiled Mathlib cache fetched via `lake exe cache get`: 8,690 files decompressed.
+- Full project build executed: `lake build` completed successfully across all 9,768 jobs.
+  * Only expected warnings observed: 2 declarations using `sorry` in `Challenge.lean` (which exists
+    solely as an unproved specification interface for Comparator testing).
+- Axiom closure executed: `lake env lean scripts/PrintAxioms.lean`
+  * Output:
+    'MainResults.ethIsFalse' depends on axioms: [propext, Classical.choice, Quot.sound]
+    'MainResults.mainTheorem' depends on axioms: [propext, Classical.choice, Quot.sound]
+  * Proves both headline theorems depend strictly on Lean's standard three foundation axioms,
+    introducing no unproved custom axioms or hypotheses.
+
+================================================================================
+PRIORITIZED DEFECTS AND LIMITATIONS
+================================================================================
+
+1. P1 (HIGH): Unverified Informal Bridge to Standard Computational Models
+   - Module: eth/MainResults.lean:26-44, paper/paper.pdf:Appendix E
+   - Confidence: Confirmed (Disclosed Limitation)
+   - Condition: Lean proves bounds for Mathlib `FinTM2` multi-stack Turing machines.
+     The reduction to RAM / word-RAM and Turing-machine equivalence is informal prose.
+   - Impact: Machine verification alone does not formally guarantee ETH refutation
+     in standard complexity definitions without the unproved simulator bridge.
+
+2. P1 (HIGH): Structural Discrepancy Between Paper Proof and Formal Proof
+   - Module: eth/proof/PaperIndex.lean:180-245
+   - Confidence: Confirmed (Disclosed Divergence)
+   - Condition: The paper claims Theorem 2 for counting, whereas the formal proof
+     primarily routes through a deciding variant (Sat) and uses a non-uniform
+     polynomial-step intermediate model before compiling to FinTM2.
+   - Impact: Direct human audits of the paper's mathematical arguments cannot assume
+     1:1 correspondence with Lean theorem lemmas without checking the compilation path.
+
+3. P2 (MEDIUM): Missing Normalization & Non-occurrence Handling in Count Contract
+   - Module: eth/MainResults.lean:177-181
+   - Confidence: Confirmed
+   - Condition: `MainTheorem` requires `AllOccur φ` and `φ.Nodup`.
+   - Impact: Applying the algorithm to arbitrary CNF instances requires preprocessing
+     isolated variables and duplicates. For counting problems, each omitted variable
+     multiplies solutions by 2, requiring careful external accounting.
+
+================================================================================
+CONCLUSION & NEXT ACTIONS
+================================================================================
+The formal contract in `MainResults.lean` accurately captures sublinear exponential
+bounds for the specific machine model, and the core single-bit uncrossing identity
+was independently validated. To close the remaining verification gate, an elan/Lean
+4.33.1 environment with 8+ GB RAM must be provisioned to run `lake build` and
+`scripts/PrintAxioms.lean`.

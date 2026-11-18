@@ -1,0 +1,16 @@
+.lake/
+**/.lake/
+**/build/
+**/lake-packages/
+*.olean
+*.ilean
+*.trace
+*.c.tmp
+.cache/
+**/.cache/
+.DS_Store
+*.swp
+*~
+.venv/
+__pycache__/
+*.pyc
